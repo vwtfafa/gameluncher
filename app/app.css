@@ -1,0 +1,25 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.list-group {
+    separator-color: transparent;
+}
+
+.btn {
+    border-radius: 8;
+    padding: 8 12;
+    font-size: 13;
+    font-weight: 500;
+}
+
+.btn-primary {
+    background-color: #3b82f6;
+    color: white;
+}
+
+.game-card {
+    border-radius: 8;
+    margin: 8;
+    padding: 12;
+}

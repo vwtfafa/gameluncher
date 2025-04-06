@@ -1,0 +1,36 @@
+appId: "com.gamelauncher.app"
+productName: "Game Launcher"
+copyright: "Copyright © 2024"
+
+directories:
+  output: "dist"
+  buildResources: "build"
+
+files:
+  - "dist/**/*"
+  - "package.json"
+  - "!**/*.map"
+
+win:
+  target:
+    - "nsis"
+  icon: "build/icon.ico"
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: "Game Launcher"
+
+mac:
+  target:
+    - "dmg"
+  icon: "build/icon.icns"
+
+linux:
+  target:
+    - "AppImage"
+    - "deb"
+  icon: "build/icon.png"
+  category: "Game" 

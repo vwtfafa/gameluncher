@@ -1,0 +1,77 @@
+{
+  "name": "game-launcher",
+  "version": "1.0.1",
+  "description": "Modern game launcher with update capabilities",
+  "main": "dist/main.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vwtfafa/gameluncher.git"
+  },
+  "scripts": {
+    "start": "electron .",
+    "dev": "concurrently \"npm run watch\" \"npm run electron\"",
+    "watch": "webpack --config webpack.config.js --watch",
+    "electron": "wait-on tcp:3000 && electron .",
+    "clean": "rimraf dist",
+    "build": "npm run clean && webpack --config webpack.config.js --mode production",
+    "build:win": "webpack --config webpack.config.js --mode production && electron-builder --win",
+    "build:mac": "webpack --config webpack.config.js --mode production && electron-builder --mac",
+    "build:linux": "webpack --config webpack.config.js --mode production && electron-builder --linux",
+    "publish": "electron-builder --win -p always"
+  },
+  "author": {
+    "name": "Game Launcher Team",
+    "email": "contact@gamelauncher.com"
+  },
+  "dependencies": {
+    "@emotion/react": "^11.11.0",
+    "@emotion/styled": "^11.11.0",
+    "@mui/icons-material": "^5.14.0",
+    "@mui/material": "^5.14.0",
+    "electron-store": "^8.1.0",
+    "electron-updater": "^6.1.7",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "chokidar": "^3.5.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "concurrently": "^8.2.0",
+    "css-loader": "^6.8.0",
+    "electron": "^27.0.0",
+    "electron-builder": "^24.0.0",
+    "html-webpack-plugin": "^5.5.0",
+    "rimraf": "^5.0.0",
+    "style-loader": "^3.3.0",
+    "ts-loader": "^9.5.0",
+    "typescript": "^5.0.0",
+    "wait-on": "^7.0.1",
+    "webpack": "^5.88.0",
+    "webpack-cli": "^5.1.0",
+    "webpack-dev-server": "^4.15.0"
+  },
+  "build": {
+    "appId": "com.gamelauncher.app",
+    "productName": "Game Launcher",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "vwtfafa",
+      "repo": "gameluncher",
+      "private": false,
+      "releaseType": "release"
+    }
+  }
+}

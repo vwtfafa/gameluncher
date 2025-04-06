@@ -1,0 +1,3 @@
+<Frame defaultPage="main-page">
+  <Frame.actionBarHidden>true</Frame.actionBarHidden>
+</Frame>
