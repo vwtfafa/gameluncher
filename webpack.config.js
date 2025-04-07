@@ -1,52 +1,67 @@
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
+const CopyWebpackPlugin = require('copy-webpack-plugin');
 
-const commonConfig = {
-  mode: process.env.NODE_ENV || 'development',
+module.exports = {
+  entry: {
+    app: './src/renderer.tsx',
+    main: './src/main.ts',
+    preload: './src/preload.ts'
+  },
+  output: {
+    path: path.resolve(__dirname, 'dist'),
+    filename: '[name].js'
+  },
+  resolve: {
+    extensions: ['.ts', '.tsx', '.js', '.jsx']
+  },
   module: {
     rules: [
       {
         test: /\.tsx?$/,
         use: 'ts-loader',
-        exclude: /node_modules/,
+        exclude: /node_modules/
       },
       {
         test: /\.css$/,
-        use: ['style-loader', 'css-loader'],
+        use: ['style-loader', 'css-loader']
       },
-    ],
-  },
-  resolve: {
-    extensions: ['.tsx', '.ts', '.js'],
-  },
-  output: {
-    path: path.resolve(__dirname, 'dist'),
-  },
-};
-
-const mainConfig = {
-  ...commonConfig,
-  target: 'electron-main',
-  entry: './src/main.ts',
-  output: {
-    ...commonConfig.output,
-    filename: 'main.js',
-  },
-};
-
-const rendererConfig = {
-  ...commonConfig,
-  target: 'electron-renderer',
-  entry: './src/renderer.tsx',
-  output: {
-    ...commonConfig.output,
-    filename: 'renderer.js',
+      {
+        test: /\.(png|jpe?g|gif|svg|ico)$/i,
+        type: 'asset/resource'
+      }
+    ]
   },
   plugins: [
     new HtmlWebpackPlugin({
       template: './src/index.html',
+      filename: 'index.html',
+      chunks: ['app']
     }),
+    new CopyWebpackPlugin({
+      patterns: [
+        {
+          from: 'build/default-game-icon.svg',
+          to: 'assets/default-game-icon.svg'
+        },
+        {
+          from: 'build/icon.ico',
+          to: 'assets/icon.ico'
+        }
+      ]
+    })
   ],
+  target: 'electron-renderer',
+  devServer: {
+    static: {
+      directory: path.join(__dirname, 'dist')
+    },
+    port: 3000,
+    hot: true
+  },
+  optimization: {
+    splitChunks: {
+      chunks: 'all'
+    }
+  }
 };
-
-module.exports = [mainConfig, rendererConfig];

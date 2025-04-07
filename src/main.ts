@@ -4,10 +4,12 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as chokidar from 'chokidar';
 import Store from 'electron-store';
+import { debounce } from 'lodash';
 
 // Initialize electron store
 const store = new Store();
 const GAMES_DIR_KEY = 'gamesDirectory';
+const GAMES_CACHE_KEY = 'gamesCache';
 
 interface GameInfo {
   name: string;
@@ -16,6 +18,10 @@ interface GameInfo {
   lastModified: number;
   size: number;
   icon?: string;
+  category?: string;
+  tags?: string[];
+  lastPlayed?: number;
+  playCount?: number;
 }
 
 let mainWindow: BrowserWindow | null = null;
@@ -33,7 +39,7 @@ function initGamesDirectory() {
   return gamesDir as string;
 }
 
-// Watch for game directory changes
+// Watch for game directory changes with debouncing
 function watchGamesDirectory(gamesDir: string) {
   if (gamesWatcher) {
     gamesWatcher.close();
@@ -44,15 +50,18 @@ function watchGamesDirectory(gamesDir: string) {
     persistent: true
   });
 
+  const debouncedScan = debounce(() => scanAndUpdateGames(gamesDir), 1000);
+
   gamesWatcher
-    .on('add', path => scanAndUpdateGames(gamesDir))
-    .on('unlink', path => scanAndUpdateGames(gamesDir))
-    .on('change', path => scanAndUpdateGames(gamesDir));
+    .on('add', debouncedScan)
+    .on('unlink', debouncedScan)
+    .on('change', debouncedScan);
 }
 
 // Scan games directory and update the list
 async function scanAndUpdateGames(gamesDir: string) {
   const games: GameInfo[] = [];
+  const cachedGames = store.get(GAMES_CACHE_KEY, {}) as Record<string, GameInfo>;
   
   try {
     const files = fs.readdirSync(gamesDir);
@@ -67,17 +76,28 @@ async function scanAndUpdateGames(gamesDir: string) {
           .filter(f => f.endsWith('.exe'));
         
         if (exeFiles.length > 0) {
-          games.push({
+          const gamePath = path.join(fullPath, exeFiles[0]);
+          const cachedGame = cachedGames[gamePath];
+          
+          const gameInfo: GameInfo = {
             name: file,
             path: fullPath,
-            executable: path.join(fullPath, exeFiles[0]),
+            executable: gamePath,
             lastModified: stats.mtimeMs,
-            size: stats.size
-          });
+            size: stats.size,
+            category: cachedGame?.category || 'Uncategorized',
+            tags: cachedGame?.tags || [],
+            lastPlayed: cachedGame?.lastPlayed || 0,
+            playCount: cachedGame?.playCount || 0
+          };
+          
+          games.push(gameInfo);
+          cachedGames[gamePath] = gameInfo;
         }
       }
     }
     
+    store.set(GAMES_CACHE_KEY, cachedGames);
     mainWindow?.webContents.send('games-updated', games);
   } catch (error) {
     console.error('Error scanning games directory:', error);
@@ -89,13 +109,14 @@ function createWindow() {
     width: 1200,
     height: 800,
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js')
     },
     frame: false,
     titleBarStyle: 'hidden',
     backgroundColor: '#1a1a1a',
-    show: false // Don't show until ready
+    show: false
   });
 
   if (process.env.NODE_ENV === 'development') {
@@ -105,7 +126,6 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
 
-  // Show window when ready
   mainWindow.once('ready-to-show', () => {
     mainWindow?.show();
   });
@@ -120,7 +140,10 @@ function createWindow() {
   scanAndUpdateGames(gamesDir);
 }
 
-// Auto-updater events
+// Auto-updater events with rate limiting
+let lastUpdateCheck = 0;
+const UPDATE_CHECK_INTERVAL = 1000 * 60 * 60; // 1 hour
+
 autoUpdater.on('checking-for-update', () => {
   mainWindow?.webContents.send('update-status', 'Checking for updates...');
 });
@@ -147,7 +170,13 @@ autoUpdater.on('update-downloaded', (info) => {
 
 app.whenReady().then(() => {
   createWindow();
-  autoUpdater.checkForUpdatesAndNotify();
+  
+  // Check for updates with rate limiting
+  const now = Date.now();
+  if (now - lastUpdateCheck > UPDATE_CHECK_INTERVAL) {
+    autoUpdater.checkForUpdatesAndNotify();
+    lastUpdateCheck = now;
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -162,7 +191,7 @@ app.on('window-all-closed', () => {
   }
 });
 
-// IPC Handlers
+// IPC Handlers with input validation
 ipcMain.handle('select-games-directory', async () => {
   const result = await dialog.showOpenDialog({
     properties: ['openDirectory']
@@ -170,10 +199,12 @@ ipcMain.handle('select-games-directory', async () => {
   
   if (!result.canceled) {
     const newDir = result.filePaths[0];
-    store.set(GAMES_DIR_KEY, newDir);
-    watchGamesDirectory(newDir);
-    scanAndUpdateGames(newDir);
-    return newDir;
+    if (fs.existsSync(newDir)) {
+      store.set(GAMES_DIR_KEY, newDir);
+      watchGamesDirectory(newDir);
+      scanAndUpdateGames(newDir);
+      return newDir;
+    }
   }
   return null;
 });
@@ -183,14 +214,30 @@ ipcMain.handle('get-games-directory', () => {
 });
 
 ipcMain.handle('launch-game', (event, executable: string) => {
-  require('child_process').spawn(executable, [], {
-    detached: true,
-    stdio: 'ignore'
-  }).unref();
+  if (typeof executable === 'string' && fs.existsSync(executable)) {
+    const process = require('child_process').spawn(executable, [], {
+      detached: true,
+      stdio: 'ignore'
+    });
+    
+    // Update game stats
+    const cachedGames = store.get(GAMES_CACHE_KEY, {}) as Record<string, GameInfo>;
+    if (cachedGames[executable]) {
+      cachedGames[executable].lastPlayed = Date.now();
+      cachedGames[executable].playCount = (cachedGames[executable].playCount || 0) + 1;
+      store.set(GAMES_CACHE_KEY, cachedGames);
+    }
+    
+    process.unref();
+  }
 });
 
 ipcMain.handle('check-for-updates', () => {
-  autoUpdater.checkForUpdatesAndNotify();
+  const now = Date.now();
+  if (now - lastUpdateCheck > UPDATE_CHECK_INTERVAL) {
+    autoUpdater.checkForUpdatesAndNotify();
+    lastUpdateCheck = now;
+  }
 });
 
 ipcMain.handle('minimize-window', () => {
